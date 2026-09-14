@@ -1,0 +1,761 @@
+{% extends 'base.html' %}
+{% block title %}{{ post.title }} | BRIGHTLY BLOG{% endblock %}
+{% block description %}{{ post.excerpt }}{% endblock %}
+{% load blog_tags %}
+{% block content %}
+<article class="post-detail">
+  <div class="container">
+    
+    {% if post.featured_image %}
+    <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" class="post-image">
+    {% endif %}
+
+    <div class="post-header">
+      <span class="meta">
+        {{ post.created|date:"M d, Y" }} • {{ post.category.name }} • {{ hits|humanize_number }} views
+      </span>
+      <h1>{{ post.title }}</h1>
+      <p class="excerpt">{{ post.excerpt }}</p>
+    </div>
+
+    <div class="post-content">
+      {{ post.content|safe }}
+    </div>
+
+    <!-- TAGS -->
+    {% if post.tags.all %}
+    <div class="tags">
+      {% for tag in post.tags.all %}
+        <span class="tag">#{{ tag.name }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    
+    <div class="author-box">
+      <img src="{{ post.author.profile.image.url }}" alt="{{ post.author.get_full_name }}">
+      <h4>Written by {{ post.author.get_full_name|default:post.author.username }}</h4>
+      <p>{{ post.author.profile.bio }}</p> {# added bio too #}
+    </div>
+
+    <!-- SHARE BUTTONS - NEW -->
+    <div class="share-box">
+      <h4>Share this article</h4>
+      <div class="share-buttons">
+        <a href="https://wa.me/?text={{ post.title }}%20{{ request.build_absolute_uri }}" target="_blank" class="share-btn whatsapp">WhatsApp</a>
+        <a href="https://twitter.com/intent/tweet?url={{ request.build_absolute_uri }}&text={{ post.title }}" target="_blank" class="share-btn twitter">Twitter</a>
+        <a href="https://www.facebook.com/sharer/sharer.php?u={{ request.build_absolute_uri }}" target="_blank" class="share-btn facebook">Facebook</a>
+        <button onclick="copyLink()" class="share-btn copy">Copy Link</button>
+      </div>
+    </div>
+
+    {% csrf_token %}
+    <div class="like-box" style="margin: 30px 0; text-align: center;">
+      {% if user.is_authenticated %}
+        <button type="button" id="like-btn" class="like-btn {% if user in post.likes.all %}liked{% endif %}" data-slug="{{ post.slug }}">
+          {% if user in post.likes.all %}❤️{% else %}🤍{% endif %} 
+          <span id="like-count">{{ post.likes.count }}</span> Like{{ post.likes.count|pluralize }}
+        </button>
+      {% else %}
+        <a href="{% url 'login' %}?next={{ request.path }}" class="like-btn">
+          🤍 {{ post.likes.count }} Like{{ post.likes.count|pluralize }} - Login to like
+        </a>
+      {% endif %}
+    </div>
+    
+    <!-- COMMENTS -->
+    <section class="comments">
+      <h3>{{ total_comments }} Comments</h3>
+      
+      {% if latest_top_comment %}
+        {% include 'comment.html' with comment=latest_top_comment %}
+      {% endif %}
+    
+      {% comment %}
+      {% if total_comments > 1 %}
+        <a href="{% url 'all_comments' post.slug %}">View all {{ total_comments }} comments</a> {# Was 24, still 24 #}
+      {% endif %}
+      {% endcomment %}
+      
+      {% if total_comments > 1 %}
+
+        <a href="{% url 'all_comments' post.slug %}"
+           class="open-comments-modal"
+           data-url="{% url 'all_comments' post.slug %}">
+        
+            View all {{ total_comments }} comments
+        
+        </a>
+        <div class="replies-container"
+             id="replies-{{ comment.id }}">
+        </div>
+        
+        {% endif %}
+    
+      <h3>Leave a Comment</h3>
+      {% if user.is_authenticated %}
+      <form method="post" class="comment-form" id="main-comment-form">
+        {% csrf_token %}
+        <div class="comment-input">
+          <img src="{{ user.profile.image.url }}" class="comment-avatar">
+          {{ form.body }}
+          {{ form.parent_id }}
+        </div>
+        <button type="submit" class="btn">Comment</button>
+      </form>
+      {% else %}
+        <p><a href="{% url 'login' %}?next={{ request.path }}">Login</a> to comment</p>
+      {% endif %}
+    </section>
+  
+    <a href="/" class="btn back-btn">← Back to all posts</a>
+
+  </div>
+</article
+
+<hr>
+    
+{% if post.category.post_set.all.count > 1 %}
+  <section class="related">
+    <h3>You might also like</h3>
+    <div class="grid">
+      {% for p in post.category.post_set.all %}
+        {% if p.id != post.id %}
+        <div class="card">
+          <img src="{{ p.featured_image.url }}">
+          <h4><a href="{{ p.get_absolute_url }}">{{ p.title }}</a></h4>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+<div id="comments-modal"
+     class="comments-modal"
+     aria-hidden="true">
+
+    <div class="comments-modal-overlay"></div>
+
+
+    <div class="comments-modal-box">
+
+        <div id="comments-modal-content">
+
+            <!-- AJAX content goes here -->
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+function copyLink(){
+  navigator.clipboard.writeText("{{ request.build_absolute_uri }}");
+  alert("Link copied to clipboard!");
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+
+
+    const modal = document.getElementById("comments-modal");
+
+    const modalContent =
+        document.getElementById("comments-modal-content");
+
+
+    /*
+    ------------------------------------------------
+    OPEN COMMENTS MODAL
+    ------------------------------------------------
+    */
+
+    document.addEventListener("click", function (e) {
+
+        const button =
+            e.target.closest(".open-comments-modal");
+
+
+        if (!button) return;
+
+
+        e.preventDefault();
+
+
+        openCommentsModal(
+            button.dataset.url
+        );
+
+    });
+
+
+    /*
+    ------------------------------------------------
+    OPEN REPLY THREAD
+    ------------------------------------------------
+    */
+    
+    document.addEventListener("click",function(e){
+        const button=e.target.closest(".show-replies-modal");
+        if(!button)return;
+    
+        e.preventDefault();
+    
+        openCommentsModal(button.dataset.url);
+    });
+    
+    
+    
+    /*
+    ------------------------------------------------
+    BACK TO ALL COMMENTS
+    ------------------------------------------------
+    */
+
+    document.addEventListener("click", function (e) {
+
+        const button =
+            e.target.closest(".modal-back-to-comments");
+
+
+        if (!button) return;
+
+
+        e.preventDefault();
+
+
+        loadModalContent(
+            button.dataset.url
+        );
+
+    });
+
+
+    /*
+    ------------------------------------------------
+    CLOSE MODAL
+    ------------------------------------------------
+    */
+
+    document.addEventListener("click", function (e) {
+
+        if (
+            e.target.closest(".comments-modal-close") ||
+            e.target.classList.contains(
+                "comments-modal-overlay"
+            )
+        ) {
+
+            closeCommentsModal();
+
+        }
+
+    });
+
+
+    /*
+    ------------------------------------------------
+    ESC KEY
+    ------------------------------------------------
+    */
+
+    document.addEventListener("keydown", function (e) {
+
+        if (
+            e.key === "Escape" &&
+            modal.classList.contains("active")
+        ) {
+
+            closeCommentsModal();
+
+        }
+
+    });
+
+
+    /*
+    ------------------------------------------------
+    OPEN MODAL
+    ------------------------------------------------
+    */
+
+    function openCommentsModal(url) {
+
+        modal.classList.add("active");
+
+        modal.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+
+        document.body.classList.add(
+            "comments-modal-open"
+        );
+
+
+        modalContent.innerHTML = `
+            <div class="comments-loading">
+                <div class="loading-spinner"></div>
+                <p>Loading comments...</p>
+            </div>
+        `;
+
+
+        loadModalContent(url);
+
+    }
+
+
+    /*
+    ------------------------------------------------
+    LOAD AJAX CONTENT
+    ------------------------------------------------
+    */
+
+    function loadModalContent(url) {
+
+        modalContent.innerHTML = `
+            <div class="comments-loading">
+                <div class="loading-spinner"></div>
+                <p>Loading...</p>
+            </div>
+        `;
+
+
+        fetch(url, {
+
+            method: "GET",
+
+            headers: {
+                "X-Requested-With": "XMLHttpRequest"
+            }
+
+        })
+
+        .then(function (response) {
+
+            if (!response.ok) {
+                throw new Error(
+                    "Unable to load comments"
+                );
+            }
+
+            return response.text();
+
+        })
+
+        .then(function (html) {
+
+            modalContent.innerHTML = html;
+
+            initialiseCommentText();
+
+        })
+
+        .catch(function (error) {
+
+            console.error(error);
+
+
+            modalContent.innerHTML = `
+                <div class="comments-error">
+                    <p>
+                        Unable to load comments.
+                    </p>
+
+                    <button
+                        type="button"
+                        class="btn"
+                        onclick="location.reload()">
+
+                        Try again
+
+                    </button>
+                </div>
+            `;
+
+        });
+
+    }
+
+
+    /*
+    ------------------------------------------------
+    CLOSE
+    ------------------------------------------------
+    */
+
+    function closeCommentsModal() {
+
+        modal.classList.remove("active");
+
+        modal.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+
+
+        document.body.classList.remove(
+            "comments-modal-open"
+        );
+
+
+        modalContent.innerHTML = "";
+
+    }
+
+
+    /*
+    ------------------------------------------------
+    COMMENT TRUNCATION
+    ------------------------------------------------
+    */
+
+    function initialiseCommentText() {
+
+        document
+            .querySelectorAll(
+                "#comments-modal .comment-text-wrapper"
+            )
+            .forEach(function (wrapper) {
+
+                const text =
+                    wrapper.querySelector(
+                        ".comment-text"
+                    );
+
+
+                const button =
+                    wrapper.querySelector(
+                        ".comment-toggle"
+                    );
+
+
+                if (!text || !button) return;
+
+
+                const fullText =
+                    text.textContent.trim();
+
+
+                const wordCount =
+                    fullText
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .length;
+
+
+                const style =
+                    window.getComputedStyle(text);
+
+
+                let lineHeight =
+                    parseFloat(
+                        style.lineHeight
+                    );
+
+
+                if (isNaN(lineHeight)) {
+
+                    lineHeight =
+                        parseFloat(
+                            style.fontSize
+                        ) * 1.4;
+
+                }
+
+
+                const threeLines =
+                    lineHeight * 3;
+
+
+                const isMoreThanThreeLines =
+                    text.scrollHeight >
+                    threeLines + 2;
+
+
+                const isMoreThan35Words =
+                    wordCount > 35;
+
+
+                if (
+                    !isMoreThanThreeLines &&
+                    !isMoreThan35Words
+                ) {
+
+                    button.hidden = true;
+
+                    return;
+
+                }
+
+
+                text.classList.add(
+                    "collapsed"
+                );
+
+
+                button.hidden = false;
+
+
+                button.textContent =
+                    "Show more";
+
+                button.onclick = function () {
+
+                    const wasExpanded =
+                        text.classList.contains("expanded");
+                
+                    if (wasExpanded) {
+                
+                        text.classList.remove("expanded");
+                
+                        text.classList.add("collapsed");
+                
+                        button.textContent = "Show more";
+                
+                    } else {
+                
+                        /*
+                         * Remember where the user currently is.
+                         */
+                        const scrollContainer =
+                            document.querySelector(
+                                "#comments-modal .comments-modal-body"
+                            );
+                
+                        const oldScrollTop =
+                            scrollContainer
+                                ? scrollContainer.scrollTop
+                                : 0;
+                
+                
+                        text.classList.remove("collapsed");
+                
+                        text.classList.add("expanded");
+                
+                        button.textContent = "Show less";
+                
+                
+                        /*
+                         * Keep the modal's scroll position.
+                         */
+                        if (scrollContainer) {
+                
+                            requestAnimationFrame(function () {
+                
+                                scrollContainer.scrollTop =
+                                    oldScrollTop;
+                
+                            });
+                
+                        }
+                
+                    }
+                
+                };
+                            });
+                
+                    }
+
+
+    /*    
+    ------------------------------------------------
+    REPLY BUTTON
+    ------------------------------------------------
+    */
+    document.addEventListener("click", function(e) {
+
+        const button = e.target.closest(".reply-btn");
+        if (!button) return;
+    
+        e.preventDefault();
+    
+        // If Reply was clicked inside the modal,
+        // keep the existing modal reply behaviour.
+        if (button.closest("#comments-modal")) {
+    
+            const form = document.querySelector("#comments-modal .comment-form");
+            if (!form) return;
+    
+            const parentInput = form.querySelector('[name="parent_id"]');
+    
+            if (parentInput) {
+                parentInput.value = button.dataset.id;
+            }
+    
+            const textarea = form.querySelector("textarea");
+    
+            if (textarea) {
+                textarea.placeholder = "Write a reply...";
+                textarea.focus();
+            }
+    
+            return;
+        }
+    
+        // Reply clicked on post_detail.html
+        // Open the same reply-thread modal.
+        if (button.dataset.url) {
+            openCommentsModal(button.dataset.url);
+        }
+    
+    });
+
+    /*
+    ------------------------------------------------
+    AJAX COMMENT / REPLY SUBMISSION
+    ------------------------------------------------
+    */
+
+    document.addEventListener("submit", function (e) {
+
+        const form =
+            e.target.closest(
+                ".ajax-comment-form, .ajax-reply-form"
+            );
+
+
+        if (!form) return;
+
+
+        e.preventDefault();
+
+
+        const submitButton =
+            form.querySelector(
+                'button[type="submit"]'
+            );
+
+
+        if (submitButton) {
+
+            submitButton.disabled = true;
+
+            submitButton.textContent =
+                "Posting...";
+
+        }
+
+
+        const formData =
+            new FormData(form);
+
+
+        fetch(form.action, {
+
+            method: "POST",
+
+            body: formData,
+
+            headers: {
+                "X-Requested-With":
+                    "XMLHttpRequest"
+            }
+
+        })
+
+        .then(function (response) {
+            if (!response.ok) {
+                return response.json()
+                    .then(function (data) {
+                        throw new Error(
+                            data.error ||
+                            "Unable to post comment"
+                        );
+
+                    });
+
+            }
+
+            return response.text();
+
+        })
+
+        .then(function (html) {
+            modalContent.innerHTML = html;
+            initialiseCommentText();
+        })
+
+        .catch(function (error) {
+            console.error(error);
+            alert(error.message || "Unable to post comment."
+            );
+        })
+
+        .finally(function () {
+            if (submitButton) {
+                submitButton.disabled =false;
+                submitButton.textContent = form.classList.contains("ajax-reply-form")? "Reply": "Comment";
+            }
+        });
+    });
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    const likeBtn = document.getElementById("like-btn");
+    if (!likeBtn) return;
+    likeBtn.addEventListener("click", function () {
+
+        // Don't allow another click while request is processing
+        if (likeBtn.disabled) return;
+
+        const slug = likeBtn.dataset.slug;
+        const csrfToken = document.querySelector(
+            '[name=csrfmiddlewaretoken]'
+        ).value;
+
+        likeBtn.disabled = true;
+
+        fetch(`/post/${slug}/like/`, {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrfToken,
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/json"
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Failed to like/unlike post.");
+            }
+
+            return response.json();
+        })
+        .then(data => {
+
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            // Update button state
+            if (data.liked === true) {
+
+                likeBtn.classList.add("liked");
+
+                likeBtn.innerHTML =
+                    `❤️ <span id="like-count">${data.total_likes}</span> ` +
+                    `${data.total_likes === 1 ? "Like" : "Likes"}`;
+
+            } else {
+
+                likeBtn.classList.remove("liked");
+
+                likeBtn.innerHTML =
+                    `🤍 <span id="like-count">${data.total_likes}</span> ` +
+                    `${data.total_likes === 1 ? "Like" : "Likes"}`;
+            }
+        })
+        .catch(error => {
+            console.error("Like error:", error);
+        })
+        .finally(() => {
+            likeBtn.disabled = false;
+        });
+    });
+});
+
+</script>
+{% endblock %}

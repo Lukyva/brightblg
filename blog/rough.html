@@ -1,0 +1,663 @@
+here l want the comments to be loaded in a modal to prevent page refreshes l mean use ajax. here are my codes
+comment_thread.html
+{% extends 'base.html' %}
+{% block title %}Replies | BRIGHTLY BLOG{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 600px; padding-top: 20px;">
+  
+  <a href="{% url 'all_comments' root_comment.post.slug %}" class="back-link">← Back to all comments</a>
+  <h3>Replies</h3>
+
+  {# Show the parent comment at top - NO REPLIES #}
+  {% include 'comment.html' with comment=root_comment hide_replies=True %}
+
+  <hr>
+  <h4>All {{ root_comment.replies.count }} Replies</h4>
+  
+  {# Loop all replies FLAT. Use comment_flat.html so it never recurses #}
+  <div class="replies" style="margin-left: 0;">
+    {% for reply in root_comment.replies.all %}
+      {% include 'comment_flat.html' with comment=reply %}
+    {% endfor %}
+  </div>
+  
+  <hr>
+  {# COMMENT FORM #}
+  {% if user.is_authenticated %}
+  <form method="post" class="comment-form" style="margin-top: 20px;">
+    {% csrf_token %}
+    <img src="{{ user.profile.image.url }}" class="comment-avatar">
+    {{ form.body }}
+    <input type="hidden" name="parent_id" id="id_parent_id" value="">
+    <button type="submit" class="btn">Post Reply</button>
+  </form>
+  {% else %}
+    <p><a href="{% url 'login' %}?next={{ request.path }}">Login</a> to reply</p>
+  {% endif %}
+  
+</div>
+
+<script>
+// Make reply buttons set the parent_id but still reply to root
+document.addEventListener("DOMContentLoaded", function(){
+  document.querySelectorAll('.reply-btn').forEach(btn => {
+    btn.onclick = function(){
+      document.getElementById('id_parent_id').value = this.dataset.id;
+      document.querySelector('.comment-form textarea').placeholder = "Write a reply to {{ root_comment.user.username }}...";
+      document.querySelector('.comment-form textarea').focus();
+      window.scrollTo(0, document.body.scrollHeight); // scroll to form
+    }
+  })
+})
+</script>
+
+{% endblock %}
+
+comment_flat.html
+<div class="comment">
+  <div class="comment-left">
+    <img src="{{ comment.user.profile.image.url }}" class="comment-avatar">
+  </div>
+
+  <div class="comment-right">
+    <div class="comment-bubble">
+      <div class="comment-header">
+        <strong>{{ comment.user.username }}</strong>
+      </div>
+
+      <div class="comment-text-wrapper">
+        <p class="comment-text">{{ comment.body }}</p>
+        <button type="button" class="comment-toggle" hidden>
+          Show more
+        </button>
+      </div>
+    </div>
+
+    <div class="comment-actions">
+      <span>{{ comment.created|timesince }} ago</span>
+      {% if user.is_authenticated %}
+        {# Force reply to go to top parent #}
+        <button class="reply-btn" data-id="{{ comment.parent.id|default:comment.id }}">
+          Reply
+        </button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    document.querySelectorAll(".comment-text-wrapper").forEach(function (wrapper) {
+
+        const text = wrapper.querySelector(".comment-text");
+        const button = wrapper.querySelector(".comment-toggle");
+
+        if (!text || !button) return;
+
+        const fullText = text.textContent.trim();
+
+        // Count words
+        const wordCount = fullText
+            .split(/\s+/)
+            .filter(Boolean)
+            .length;
+
+        // Calculate line height
+        const style = window.getComputedStyle(text);
+
+        let lineHeight = parseFloat(style.lineHeight);
+
+        if (isNaN(lineHeight)) {
+            lineHeight = parseFloat(style.fontSize) * 1.4;
+        }
+
+        // A 3-line height
+        const threeLines = lineHeight * 3;
+
+        // Check natural height BEFORE truncating
+        const isMoreThanThreeLines =
+            text.scrollHeight > threeLines + 2;
+
+        const isMoreThan35Words =
+            wordCount > 35;
+
+        // Only truncate if necessary
+        if (!isMoreThanThreeLines && !isMoreThan35Words) {
+            return;
+        }
+
+        // Collapse
+        text.classList.add("collapsed");
+
+        // Show button
+        button.hidden = false;
+
+        let expanded = false;
+
+        button.addEventListener("click", function () {
+
+            if (!expanded) {
+
+                text.classList.remove("collapsed");
+
+                button.textContent = "Show less";
+
+                expanded = true;
+
+            } else {
+
+                text.classList.add("collapsed");
+
+                button.textContent = "Show more";
+
+                expanded = false;
+            }
+
+        });
+
+    });
+
+});
+</script>
+
+all_comments.html
+{% extends 'base.html' %}
+{% block title %}All Comments: {{ post.title }} | BRIGHTLY BLOG{% endblock %}
+
+{% block content %}
+<article class="post-detail">
+  <div class="container">
+    
+    <div class="comments-header">
+      <h2>All {{ total_comments }} Comments</h2>
+      <a href="{{ post.get_absolute_url }}" class="back-btn">← Back to post</a>
+    </div>
+
+    <div class="comments-list">
+        {% for comment in comments %}
+          {% include 'comment.html' with comment=comment %}
+          
+          {# FLAT LIST OF ALL REPLIES UNDER THIS COMMENT #}
+          {% if comment.all_replies_flat %}
+            <div class="replies" style="margin-left: 40px;">
+              {% for reply in comment.all_replies_flat %}
+                {% include 'comment_flat.html' with comment=reply %}
+              {% endfor %}
+            </div>
+          {% endif %}
+      
+        {% empty %}
+          <p class="no-comments">No comments yet.</p>
+        {% endfor %}
+      </div>
+
+    
+    {% if user.is_authenticated %}
+    <form method="post" class="comment-form">
+      {% csrf_token %}
+      <img src="{{ user.profile.image.url }}" class="comment-avatar">
+      {{ form.body }}
+      <input type="hidden" name="parent_id" id="id_parent_id" value="">
+      <button type="submit" class="btn">Post Comment</button>
+    </form>
+    {% else %}
+      <p><a href="{% url 'login' %}?next={{ request.path }}">Login</a> to comment</p>
+    {% endif %}
+
+  </div>
+</article>
+<script>
+// Make reply buttons set the parent_id
+document.querySelectorAll('.reply-btn').forEach(btn => {
+  btn.onclick = function(){
+    document.getElementById('id_parent_id').value = this.dataset.id;
+    document.querySelector('.comment-form textarea').placeholder = "Write a reply...";
+    document.querySelector('.comment-form textarea').focus();
+  }
+})
+</script>
+
+{% endblock %}
+
+comment.html
+<div class="comment" id="comment-{{ comment.id }}">
+  <div class="comment-left">
+    <img src="{{ comment.user.profile.image.url }}" class="comment-avatar">
+  </div>
+
+  <div class="comment-right">
+    <div class="comment-bubble">
+      <div class="comment-header">
+        <strong>{{ comment.user.username }}</strong>
+      </div>
+
+      <div class="comment-text-wrapper">
+        <p class="comment-text">{{ comment.body }}</p>
+        <button type="button" class="comment-toggle" hidden>
+          Show more
+        </button>
+      </div>
+    </div>
+
+    <div class="comment-actions">
+      <span>{{ comment.created|timesince }} ago</span>
+      {% if user.is_authenticated %}
+      <button class="reply-btn" data-id="{{ comment.parent.id|default:comment.id }}">Reply</button>
+      {% endif %}
+    </div>
+
+    {# THIS WHOLE BLOCK ONLY RUNS IF hide_replies IS FALSE #}
+    {% if not hide_replies %}
+      {% with replies=comment.replies.all %}
+      {% if replies %}
+      
+      <div class="replies" style="margin-left: 40px;">
+        {% with latest_reply=replies.last %}
+        <div class="reply-item">
+          {% include 'comment_flat.html' with comment=latest_reply %} {# use flat here too #}
+        </div>
+        {% endwith %}
+      </div>
+
+      {% if replies|length > 1 %}
+        <a href="{% url 'comment_thread' comment.id %}" class="show-more-btn">
+          View all {{ replies.count }} replies
+        </a>
+      {% endif %}
+      {% endif %}
+      {% endwith %}
+    {% endif %}
+
+  </div>
+</div>
+
+views
+from django.shortcuts import render, get_object_or_404, redirect
+from django.core.paginator import Paginator
+from django.db.models import Q
+from django.db import models
+from .models import Post, Category, Comment
+from .forms import CommentForm, SignupForm
+from django.shortcuts import get_object_or_404
+from hitcount.views import HitCountDetailView
+from django.db.models import Count
+from hitcount.models import HitCount
+from django.contrib.auth.forms import UserCreationForm
+from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import login_required
+from django.views.generic import CreateView
+from django.contrib import messages
+from django.db.models import Q
+
+def signup(request):
+    if request.method == 'POST':
+        form = SignupForm(request.POST) # CHANGED
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Account created! You can now login.")
+            return redirect('login')
+    else:
+        form = SignupForm() # CHANGED
+    
+    return render(request, 'registration/signup.html', {'form': form})  
+    
+
+def home(request):
+    posts = Post.objects.filter(published=True).order_by('-created')[:6]
+    
+    # FIX: Get top 3 most viewed posts using our 'views' field
+    featured = Post.objects.filter(published=True)\
+        .order_by('-views')[:3] # <-- use views field directly
+        
+    categories = Category.objects.all()
+    
+    return render(request, 'home.html', {
+        'posts': posts,
+        'featured': featured,
+        'categories': categories
+    })
+    
+def post_list(request):
+    posts = Post.objects.filter(published=True).order_by('-created')
+    query = request.GET.get('q')
+    if query: posts = posts.filter(Q(title__icontains=query) | Q(content__icontains=query))
+    paginator = Paginator(posts, 9)
+    page = paginator.get_page(request.GET.get('page'))
+    return render(request, 'post_list.html', {'posts': page})
+
+
+class PostDetailView(HitCountDetailView):
+    model = Post
+    template_name = 'post_detail.html'
+    context_object_name = 'post'
+    slug_field = 'slug'
+    count_hit = False
+    
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        # INCREASE VIEWS BY 1 EVERY TIME PAGE LOADS
+        obj.views = models.F('views') + 1 
+        obj.save(update_fields=['views'])
+        # refresh from db so F() works
+        obj.refresh_from_db()
+        return obj
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        context['total_comments'] = self.object.comments.filter(active=True).count() # 24
+    
+        # 2. ONLY TOP LEVEL for displaying the first few
+        top_level_comments = self.object.comments.filter(parent__isnull=True, active=True).order_by('-created')
+        
+        context['comments'] = top_level_comments
+        context['latest_top_comment'] = top_level_comments.first()
+        context['form'] = CommentForm()
+        context['hits'] = self.object.views # USE OUR NEW FIELD
+        return context
+
+    @method_decorator(login_required)
+    def post(self, request, *args, **kwargs):
+        post = self.get_object()
+        form = CommentForm(data=request.POST)
+        if form.is_valid():
+            new_comment = form.save(commit=False)
+            new_comment.post = post
+            new_comment.user = request.user
+            new_comment.active = True # make sure it's active
+            parent_id = form.cleaned_data.get('parent_id')
+            if parent_id: # if it's a reply
+                new_comment.parent = Comment.objects.get(id=parent_id)
+            new_comment.save()
+        return self.get(request, *args, **kwargs)
+    
+@login_required # LIKE VIEW
+def like_post(request, slug):
+    post = get_object_or_404(Post, slug=slug)
+    if request.user in post.likes.all():
+        post.likes.remove(request.user)
+    else:
+        post.likes.add(request.user)
+    return redirect('post_detail', slug=slug)
+
+def category_posts(request, slug):
+    category = get_object_or_404(Category, slug=slug)
+    posts = Post.objects.filter(category=category, published=True).order_by('-created')
+    
+    return render(request, 'category.html', {
+        'category': category,
+        'posts': posts
+    })
+    
+def comment_thread(request, comment_id):
+    root_comment = get_object_or_404(Comment, id=comment_id, active=True)
+    post = root_comment.post
+
+    # Get all direct replies to this root comment - flat
+    replies = root_comment.replies.filter(active=True).order_by('created')
+
+    if request.method == 'POST':
+        form = CommentForm(request.POST)
+        if form.is_valid() and request.user.is_authenticated:
+            new_comment = form.save(commit=False)
+            new_comment.post = post
+            new_comment.user = request.user
+            new_comment.active = True
+            # FORCE IT TO REPLY TO THE ROOT COMMENT. No nesting
+            new_comment.parent = root_comment 
+            new_comment.save()
+            return redirect('comment_thread', comment_id=root_comment.id)
+        # If form is invalid, we still need to fall through and render the page with errors
+    else:
+        form = CommentForm()
+
+    # THIS RETURN MUST BE OUTSIDE THE IF/ELSE. For both GET and invalid POST
+    context = {
+        'root_comment': root_comment,
+        'post': post, # needed for back link
+        'replies': replies,
+        'form': form,
+    }
+    return render(request, 'comment_thread.html', context)
+
+def all_comments(request, slug):
+    post = get_object_or_404(Post, slug=slug)
+
+    # 1. Only top level comments
+    top_comments = post.comments.filter(parent__isnull=True, active=True).order_by('-created')
+
+    # 2. For each top comment, attach ALL its descendants flat
+    for c in top_comments:
+        # Get all replies where the root is this top comment
+        c.all_replies_flat = post.comments.filter(
+            active=True
+        ).filter(
+            Q(parent=c) | Q(parent__parent=c) | Q(parent__parent__parent=c) # goes 3 levels deep and flattens
+        ).order_by('created')
+        # If you only want direct replies: c.all_replies_flat = c.replies.filter(active=True).order_by('created')
+
+    total_comments = post.comments.filter(active=True).count()
+
+    if request.method == 'POST':
+        form = CommentForm(request.POST)
+        if form.is_valid():
+            new_comment = form.save(commit=False)
+            new_comment.post = post
+            new_comment.user = request.user
+            new_comment.active = True
+            parent_id = request.POST.get('parent_id')
+            if parent_id:
+                parent_comment = Comment.objects.get(id=parent_id)
+                # MAGIC: Force it to reply to the TOP parent, not the reply
+                if parent_comment.parent:
+                    new_comment.parent = parent_comment.parent
+                else:
+                    new_comment.parent = parent_comment
+            new_comment.save()
+            return redirect('all_comments', slug=post.slug)
+    else:
+        form = CommentForm()
+
+    context = {
+        'post': post,
+        'comments': top_comments,
+        'total_comments': total_comments,
+        'form': form,
+    }
+    return render(request, 'all_comments.html', context)
+
+post_detail.html
+{% extends 'base.html' %}
+{% block title %}{{ post.title }} | BRIGHTLY BLOG{% endblock %}
+{% block description %}{{ post.excerpt }}{% endblock %}
+{% load blog_tags %}
+{% block content %}
+<article class="post-detail">
+  <div class="container">
+    
+    {% if post.featured_image %}
+    <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" class="post-image">
+    {% endif %}
+
+    <div class="post-header">
+      <span class="meta">
+        {{ post.created|date:"M d, Y" }} • {{ post.category.name }} • {{ hits|humanize_number }} views
+      </span>
+      <h1>{{ post.title }}</h1>
+      <p class="excerpt">{{ post.excerpt }}</p>
+    </div>
+
+    <div class="post-content">
+      {{ post.content|safe }}
+    </div>
+
+    <!-- TAGS -->
+    {% if post.tags.all %}
+    <div class="tags">
+      {% for tag in post.tags.all %}
+        <span class="tag">#{{ tag.name }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    
+    <div class="author-box">
+      <img src="{{ post.author.profile.image.url }}" alt="{{ post.author.get_full_name }}">
+      <h4>Written by {{ post.author.get_full_name|default:post.author.username }}</h4>
+      <p>{{ post.author.profile.bio }}</p> {# added bio too #}
+    </div>
+
+    <!-- SHARE BUTTONS - NEW -->
+    <div class="share-box">
+      <h4>Share this article</h4>
+      <div class="share-buttons">
+        <a href="https://wa.me/?text={{ post.title }}%20{{ request.build_absolute_uri }}" target="_blank" class="share-btn whatsapp">WhatsApp</a>
+        <a href="https://twitter.com/intent/tweet?url={{ request.build_absolute_uri }}&text={{ post.title }}" target="_blank" class="share-btn twitter">Twitter</a>
+        <a href="https://www.facebook.com/sharer/sharer.php?u={{ request.build_absolute_uri }}" target="_blank" class="share-btn facebook">Facebook</a>
+        <button onclick="copyLink()" class="share-btn copy">Copy Link</button>
+      </div>
+    </div>
+
+    <hr>
+    
+    {% if post.category.post_set.all.count > 1 %}
+      <section class="related">
+        <h3>You might also like</h3>
+        <div class="grid">
+          {% for p in post.category.post_set.all %}
+            {% if p.id != post.id %}
+            <div class="card">
+              <img src="{{ p.featured_image.url }}">
+              <h4><a href="{{ p.get_absolute_url }}">{{ p.title }}</a></h4>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    <!-- COMMENTS -->
+    
+    <section class="comments">
+      <h3>{{ total_comments }} Comments</h3>
+      
+      {% if latest_top_comment %}
+        {% include 'comment.html' with comment=latest_top_comment %}
+      {% endif %}
+    
+    
+      {% if total_comments > 1 %}
+        <a href="{% url 'all_comments' post.slug %}">View all {{ total_comments }} comments</a> {# Was 24, still 24 #}
+      {% endif %}
+    
+      <h3>Leave a Comment</h3>
+      {% if user.is_authenticated %}
+      <form method="post" class="comment-form" id="main-comment-form">
+        {% csrf_token %}
+        <div class="comment-input">
+          <img src="{{ user.profile.image.url }}" class="comment-avatar">
+          {{ form.body }}
+          {{ form.parent_id }}
+        </div>
+        <button type="submit" class="btn">Comment</button>
+      </form>
+      {% else %}
+        <p><a href="{% url 'login' %}?next={{ request.path }}">Login</a> to comment</p>
+      {% endif %}
+    </section>
+    
+    <a href="/" class="btn back-btn">← Back to all posts</a>
+
+  </div>
+</article>
+
+<script>
+function copyLink(){
+  navigator.clipboard.writeText("{{ request.build_absolute_uri }}");
+  alert("Link copied to clipboard!");
+}
+
+document.querySelectorAll('.reply-btn').forEach(btn => {
+  btn.addEventListener('click', function(){
+    let commentId = this.dataset.id;
+    let form = document.getElementById('main-comment-form');
+    form.parent_id.value = commentId; // set who we reply to
+    form.querySelector('textarea').placeholder = "Write a reply...";
+    form.querySelector('textarea').focus();
+  })
+})
+
+</script>
+{% endblock %}
+
+urls 
+from django.contrib import admin
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+from blog import views
+from django.contrib.auth import views as auth_views
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', views.home, name='home'),
+    path('blog/', views.post_list, name='post_list'),
+    path("ckeditor5/", include('django_ckeditor_5.urls')),
+    path('blog/<slug:slug>/', views.PostDetailView.as_view(), name='post_detail'),
+    path('category/<slug:slug>/', views.category_posts, name='category_posts'),
+    path('post/<slug:slug>/like/', views.like_post, name='like_post'),
+    path('login/', auth_views.LoginView.as_view(), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('signup/', views.signup, name='signup'),
+    path('comment/<int:comment_id>/', views.comment_thread, name='comment_thread'),
+    path('post/<slug:slug>/comments/', views.all_comments, name='all_comments'),
+    
+    
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+  post_detail.html
+      {% comment %}
+    <section class="comments">
+      <h3>{{ total_comments }} Comments</h3>
+      
+      {% if latest_top_comment %}
+        {% include 'comment.html' with comment=latest_top_comment %}
+      {% endif %}
+    
+      {% comment %}
+      {% if total_comments > 1 %}
+        <a href="{% url 'all_comments' post.slug %}">View all {{ total_comments }} comments</a> {# Was 24, still 24 #}
+      {% endif %}
+      {% endcomment %}
+      
+      {% if total_comments > 1 %}
+
+        <a href="{% url 'all_comments' post.slug %}"
+           class="open-comments-modal"
+           data-url="{% url 'all_comments' post.slug %}">
+        
+            View all {{ total_comments }} comments
+        
+        </a>
+        <div class="replies-container"
+             id="replies-{{ comment.id }}">
+        </div>
+        
+        {% endif %}
+    
+      <h3>Leave a Comment</h3>
+      {% if user.is_authenticated %}
+      <form method="post" class="comment-form" id="main-comment-form">
+        {% csrf_token %}
+        <div class="comment-input">
+          <img src="{{ user.profile.image.url }}" class="comment-avatar">
+          {{ form.body }}
+          {{ form.parent_id }}
+        </div>
+        <button type="submit" class="btn">Comment</button>
+      </form>
+      {% else %}
+        <p><a href="{% url 'login' %}?next={{ request.path }}">Login</a> to comment</p>
+      {% endif %}
+    </section>
+    {% endcomment %}
+

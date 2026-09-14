@@ -1,0 +1,89 @@
+<div class="comments-modal-header">
+
+    <div>
+        <button type="button"
+                class="modal-back-to-comments"
+                data-url="{% url 'all_comments' post.slug %}">
+            ←
+        </button>
+
+        <div>
+            <h3>Replies</h3>
+            <span>{{ root_comment.replies.count }} replies</span>
+        </div>
+    </div>
+
+    <button type="button"
+            class="comments-modal-close"
+            aria-label="Close">
+        &times;
+    </button>
+
+</div>
+
+
+<div class="comments-modal-body">
+
+    <div class="modal-root-comment">
+
+        {% include 'comment.html' with comment=root_comment hide_replies=True modal_mode=True %}
+
+    </div>
+
+    <hr class="modal-divider">
+
+    <h4 class="modal-replies-title">
+        All {{ replies.count }} Replies
+    </h4>
+
+    <div class="replies modal-replies">
+
+        {% for reply in replies %}
+
+            {% include 'comment_flat.html' with comment=reply modal_mode=True %}
+
+        {% empty %}
+
+            <p class="no-comments">
+                No replies yet.
+            </p>
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+
+{% if user.is_authenticated %}
+
+<div class="comments-modal-footer">
+
+    <form method="post"
+          class="comment-form ajax-reply-form"
+          action="{% url 'comment_thread' root_comment.id %}">
+
+        {% csrf_token %}
+
+        <div class="comment-input">
+
+            <img src="{{ user.profile.image.url }}"
+                 class="comment-avatar">
+
+            {{ form.body }}
+
+            <input type="hidden"
+                   name="parent_id"
+                   value="{{ root_comment.id }}">
+
+        </div>
+
+        <button type="submit" class="btn">
+            Reply
+        </button>
+
+    </form>
+
+</div>
+
+{% endif %}

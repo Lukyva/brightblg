@@ -1,0 +1,604 @@
+post_detail.html
+{% extends 'base.html' %}
+{% block title %}{{ post.title }} | BRIGHTLY BLOG{% endblock %}
+{% block description %}{{ post.excerpt }}{% endblock %}
+{% load blog_tags %}
+{% block content %}
+<article class="post-detail">
+  <div class="container">
+    {% if post.featured_image %}
+    <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" class="post-image">
+    {% endif %}
+    <div class="post-header">
+      <span class="meta">{{ post.created|date:"M d, Y" }} • {{ post.category.name }} • {{ hits|humanize_number }} views</span>
+      <h1>{{ post.title }}</h1>
+      <p class="excerpt">{{ post.excerpt }}</p>
+    </div>
+    <div class="post-content">{{ post.content|safe }}</div>
+    {% if post.tags.all %}
+    <div class="tags">
+      {% for tag in post.tags.all %}
+      <span class="tag">#{{ tag.name }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="author-box">
+      <img src="{{ post.author.profile.image.url }}" alt="{{ post.author.get_full_name }}">
+      <h4>Written by {{ post.author.get_full_name|default:post.author.username }}</h4>
+      <p>{{ post.author.profile.bio }}</p>
+    </div>
+    <div class="share-box">
+      <h4>Share this article</h4>
+      <div class="share-buttons">
+        <a href="https://wa.me/?text={{ post.title }}%20{{ request.build_absolute_uri }}" target="_blank" class="share-btn whatsapp">WhatsApp</a>
+        <a href="https://twitter.com/intent/tweet?url={{ request.build_absolute_uri }}&text={{ post.title }}" target="_blank" class="share-btn twitter">Twitter</a>
+        <a href="https://www.facebook.com/sharer/sharer.php?u={{ request.build_absolute_uri }}" target="_blank" class="share-btn facebook">Facebook</a>
+        <button onclick="copyLink()" class="share-btn copy">Copy Link</button>
+      </div>
+    </div>
+    <hr>
+    {% if post.category.post_set.all.count > 1 %}
+    <section class="related">
+      <h3>You might also like</h3>
+      <div class="grid">
+        {% for p in post.category.post_set.all %}
+        {% if p.id != post.id %}
+        <div class="card">
+          <img src="{{ p.featured_image.url }}">
+          <h4><a href="{{ p.get_absolute_url }}">{{ p.title }}</a></h4>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+    <section class="comments">
+      <h3>{{ total_comments }} Comments</h3>
+      {% if latest_top_comment %}
+      {% include 'comment.html' with comment=latest_top_comment %}
+      {% endif %}
+      {% if total_comments > 1 %}
+      <a href="{% url 'all_comments' post.slug %}" class="open-comments-modal" data-url="{% url 'all_comments' post.slug %}">View all {{ total_comments }} comments</a>
+      <div class="replies-container" id="replies-{{ comment.id }}"></div>
+      {% endif %}
+      <h3>Leave a Comment</h3>
+      {% if user.is_authenticated %}
+      <form method="post" class="comment-form" id="main-comment-form">
+        {% csrf_token %}
+        <div class="comment-input">
+          <img src="{{ user.profile.image.url }}" class="comment-avatar">
+          {{ form.body }}
+          {{ form.parent_id }}
+        </div>
+        <button type="submit" class="btn">Comment</button>
+      </form>
+      {% else %}
+      <p><a href="{% url 'login' %}?next={{ request.path }}">Login</a> to comment</p>
+      {% endif %}
+    </section>
+    <a href="/" class="btn back-btn">← Back to all posts</a>
+  </div>
+</article>
+<div id="comments-modal" class="comments-modal" aria-hidden="true">
+  <div class="comments-modal-overlay"></div>
+  <div class="comments-modal-box">
+    <div id="comments-modal-content"></div>
+  </div>
+</div>
+<script>
+function copyLink(){navigator.clipboard.writeText("{{ request.build_absolute_uri }}");alert("Link copied to clipboard!");}
+document.addEventListener("DOMContentLoaded",function(){
+  const modal=document.getElementById("comments-modal");
+  const modalContent=document.getElementById("comments-modal-content");
+  document.addEventListener("click",function(e){
+    const button=e.target.closest(".open-comments-modal");
+    if(!button)return;
+    e.preventDefault();
+    openCommentsModal(button.dataset.url);
+  });
+  document.addEventListener("click",function(e){
+    const button=e.target.closest(".show-replies-modal");
+    if(!button)return;
+    e.preventDefault();
+    loadModalContent(button.dataset.url);
+  });
+  document.addEventListener("click",function(e){
+    const button=e.target.closest(".modal-back-to-comments");
+    if(!button)return;
+    e.preventDefault();
+    loadModalContent(button.dataset.url);
+  });
+  document.addEventListener("click",function(e){
+    if(e.target.closest(".comments-modal-close")||e.target.classList.contains("comments-modal-overlay")){closeCommentsModal();}
+  });
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&modal.classList.contains("active")){closeCommentsModal();}});
+  function openCommentsModal(url){
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden","false");
+    document.body.classList.add("comments-modal-open");
+    modalContent.innerHTML=`<div class="comments-loading"><div class="loading-spinner"></div><p>Loading comments...</p></div>`;
+    loadModalContent(url);
+  }
+  function loadModalContent(url){
+    modalContent.innerHTML=`<div class="comments-loading"><div class="loading-spinner"></div><p>Loading...</p></div>`;
+    fetch(url,{method:"GET",headers:{"X-Requested-With":"XMLHttpRequest"}})
+    .then(function(response){if(!response.ok){throw new Error("Unable to load comments");}return response.text();})
+    .then(function(html){modalContent.innerHTML=html;initialiseCommentText();})
+    .catch(function(error){console.error(error);modalContent.innerHTML=`<div class="comments-error"><p>Unable to load comments.</p><button type="button" class="btn" onclick="location.reload()">Try again</button></div>`;});
+  }
+  function closeCommentsModal(){
+    modal.classList.remove("active");
+    modal.setAttribute("aria-hidden","true");
+    document.body.classList.remove("comments-modal-open");
+    modalContent.innerHTML="";
+  }
+  function initialiseCommentText(){
+    document.querySelectorAll("#comments-modal .comment-text-wrapper").forEach(function(wrapper){
+      const text=wrapper.querySelector(".comment-text");
+      const button=wrapper.querySelector(".comment-toggle");
+      if(!text||!button)return;
+      const fullText=text.textContent.trim();
+      const wordCount=fullText.split(/\s+/).filter(Boolean).length;
+      const style=window.getComputedStyle(text);
+      let lineHeight=parseFloat(style.lineHeight);
+      if(isNaN(lineHeight)){lineHeight=parseFloat(style.fontSize)*1.4;}
+      const threeLines=lineHeight*3;
+      const isMoreThanThreeLines=text.scrollHeight>threeLines+2;
+      const isMoreThan35Words=wordCount>35;
+      if(!isMoreThanThreeLines&&!isMoreThan35Words){button.hidden=true;return;}
+      text.classList.add("collapsed");
+      button.hidden=false;
+      button.textContent="Show more";
+      button.onclick=function(){
+        const wasExpanded=text.classList.contains("expanded");
+        if(wasExpanded){
+          text.classList.remove("expanded");
+          text.classList.add("collapsed");
+          button.textContent="Show more";
+        }else{
+          const scrollContainer=document.querySelector("#comments-modal .comments-modal-body");
+          const oldScrollTop=scrollContainer?scrollContainer.scrollTop:0;
+          text.classList.remove("collapsed");
+          text.classList.add("expanded");
+          button.textContent="Show less";
+          if(scrollContainer){requestAnimationFrame(function(){scrollContainer.scrollTop=oldScrollTop;});}
+        }
+      };
+    });
+  }
+  document.addEventListener("click",function(e){
+    const button=e.target.closest(".reply-btn");
+    if(!button)return;
+    const form=document.querySelector("#comments-modal .comment-form");
+    if(!form)return;
+    const parentInput=form.querySelector('[name="parent_id"]');
+    if(parentInput){parentInput.value=button.dataset.id;}
+    const textarea=form.querySelector("textarea");
+    if(textarea){textarea.placeholder="Write a reply...";textarea.focus();}
+  });
+  document.addEventListener("submit",function(e){
+    const form=e.target.closest(".ajax-comment-form, .ajax-reply-form");
+    if(!form)return;
+    e.preventDefault();
+    const submitButton=form.querySelector('button[type="submit"]');
+    if(submitButton){submitButton.disabled=true;submitButton.textContent="Posting...";}
+    const formData=new FormData(form);
+    fetch(form.action,{method:"POST",body:formData,headers:{"X-Requested-With":"XMLHttpRequest"}})
+    .then(function(response){if(!response.ok){return response.json().then(function(data){throw new Error(data.error||"Unable to post comment");});}return response.text();})
+    .then(function(html){modalContent.innerHTML=html;initialiseCommentText();})
+    .catch(function(error){console.error(error);alert(error.message||"Unable to post comment.");})
+    .finally(function(){if(submitButton){submitButton.disabled=false;submitButton.textContent=form.classList.contains("ajax-reply-form")?"Reply":"Comment";}});
+  });
+});
+</script>
+{% endblock %}
+
+comment_thread.html
+{% extends 'base.html' %}
+{% block title %}Replies | BRIGHTLY BLOG{% endblock %}
+{% block content %}
+<div class="container" style="max-width:600px;padding-top:20px;">
+  <a href="{% url 'all_comments' root_comment.post.slug %}" class="back-link">← Back to all comments</a>
+  <h3>Replies</h3>
+  {% include 'comment.html' with comment=root_comment hide_replies=True %}
+  <hr>
+  <h4>All {{ root_comment.replies.count }} Replies</h4>
+  <div class="replies">
+    {% for reply in root_comment.replies.all %}
+    {% include 'comment_flat.html' with comment=reply %}
+    {% empty %}
+    <p class="no-comments">No replies yet.</p>
+    {% endfor %}
+  </div>
+  {% if user.is_authenticated %}
+  <form method="post" class="comment-form" style="margin-top:20px;">
+    {% csrf_token %}
+    <img src="{{ user.profile.image.url }}" class="comment-avatar">
+    {{ form.body }}
+    <input type="hidden" name="parent_id" value="{{ root_comment.id }}">
+    <button type="submit" class="btn">Post Reply</button>
+  </form>
+  {% else %}
+  <p><a href="{% url 'login' %}?next={{ request.path }}">Login</a> to reply</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+
+comment_flat.html
+<div class="comment">
+  <div class="comment-left">
+    <img src="{{ comment.user.profile.image.url }}" class="comment-avatar">
+  </div>
+  <div class="comment-right">
+    <div class="comment-bubble">
+      <div class="comment-header">
+        <strong>{{ comment.user.username }}</strong>
+      </div>
+      <div class="comment-text-wrapper">
+        <p class="comment-text">{{ comment.body }}</p>
+        <button type="button" class="comment-toggle" hidden>Show more</button>
+      </div>
+    </div>
+    <div class="comment-actions">
+      <span>{{ comment.created|timesince }} ago</span>
+      {% if user.is_authenticated %}
+      <button type="button" class="reply-btn" data-id="{{ comment.parent.id|default:comment.id }}">Reply</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+comment.html
+<div class="comment" id="comment-{{ comment.id }}">
+  <div class="comment-left">
+    <img src="{{ comment.user.profile.image.url }}" class="comment-avatar">
+  </div>
+  <div class="comment-right">
+    <div class="comment-bubble">
+      <div class="comment-header">
+        <strong>{{ comment.user.username }}</strong>
+      </div>
+      <div class="comment-text-wrapper">
+        <p class="comment-text">{{ comment.body }}</p>
+        <button type="button" class="comment-toggle" hidden>Show more</button>
+      </div>
+    </div>
+    <div class="comment-actions">
+      <span>{{ comment.created|timesince }} ago</span>
+      {% if user.is_authenticated %}
+      <button type="button" class="reply-btn" data-id="{{ comment.parent.id|default:comment.id }}">Reply</button>
+      {% endif %}
+    </div>
+    {% if not hide_replies %}
+    {% with replies=comment.replies.all %}
+    {% if replies %}
+    <div class="replies" style="margin-left:40px;">
+      {% with latest_reply=replies.last %}
+      <div class="reply-item">
+        {% include 'comment_flat.html' with comment=latest_reply %}
+      </div>
+      {% endwith %}
+    </div>
+    {% if replies|length > 1 %}
+    <a href="{% url 'comment_thread' comment.id %}" class="show-more-btn show-replies-modal" data-url="{% url 'comment_thread' comment.id %}">View all {{ replies.count }} replies</a>
+    {% endif %}
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+  </div>
+</div>
+
+comment_thread_modal.html
+<div class="comments-modal-header">
+  <div>
+    <button type="button" class="modal-back-to-comments" data-url="{% url 'all_comments' post.slug %}">←</button>
+    <div>
+      <h3>Replies</h3>
+      <span>{{ root_comment.replies.count }} replies</span>
+    </div>
+  </div>
+  <button type="button" class="comments-modal-close" aria-label="Close">&times;</button>
+</div>
+<div class="comments-modal-body">
+  <div class="modal-root-comment">
+    {% include 'comment.html' with comment=root_comment hide_replies=True modal_mode=True %}
+  </div>
+  <hr class="modal-divider">
+  <h4 class="modal-replies-title">All {{ replies.count }} Replies</h4>
+  <div class="replies modal-replies">
+    {% for reply in replies %}
+    {% include 'comment_flat.html' with comment=reply modal_mode=True %}
+    {% empty %}
+    <p class="no-comments">No replies yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% if user.is_authenticated %}
+<div class="comments-modal-footer">
+  <form method="post" class="comment-form ajax-reply-form" action="{% url 'comment_thread' root_comment.id %}">
+    {% csrf_token %}
+    <div class="comment-input">
+      <img src="{{ user.profile.image.url }}" class="comment-avatar">
+      {{ form.body }}
+      <input type="hidden" name="parent_id" value="{{ root_comment.id }}">
+    </div>
+    <button type="submit" class="btn">Reply</button>
+  </form>
+</div>
+{% endif %}
+
+comments_modal.html
+<div class="comments-modal-header">
+  <div>
+    <h3>Comments</h3>
+    <span>{{ total_comments }} comments</span>
+  </div>
+  <button type="button" class="comments-modal-close" aria-label="Close">&times;</button>
+</div>
+<div class="comments-modal-body">
+  {% if comments %}
+  <div class="comments-list">
+    {% for comment in comments %}
+    <div class="modal-comment-block">
+      {% include 'comment.html' with comment=comment modal_mode=True %}
+      {% if comment.all_replies_flat %}
+      <div class="replies" style="margin-left:40px;">
+        {% for reply in comment.all_replies_flat %}
+        {% include 'comment_flat.html' with comment=reply modal_mode=True %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="no-comments">No comments yet.</p>
+  {% endif %}
+</div>
+{% if user.is_authenticated %}
+<div class="comments-modal-footer">
+  <form method="post" class="comment-form ajax-comment-form" action="{% url 'all_comments' post.slug %}">
+    {% csrf_token %}
+    <div class="comment-input">
+      <img src="{{ user.profile.image.url }}" class="comment-avatar">
+      {{ form.body }}
+      {{ form.parent_id }}
+    </div>
+    <button type="submit" class="btn">Comment</button>
+  </form>
+</div>
+{% endif %}
+
+/* === PREMIUM BLOG THEME === */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap');
+
+:root{
+  --primary:#0f172a;
+  --accent:#2563eb;
+  --accent-hover:#1d4ed8;
+  --bg:#ffffff;
+  --muted:#f8fafc;
+  --text:#334155;
+  --border:#e2e8f0;
+}
+
+/* RESET + STICKY FOOTER */
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{min-height:100%;}
+body{
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+  width:100vw;
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.75;
+  font-family:'Inter',sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrapper{min-height:100vh;display:flex;flex-direction:column;}
+main{flex:1;}
+.container{max-width:1100px;margin:0 auto;padding:0 24px;}
+
+/* NAVBAR */
+.navbar{
+  background:#fff;
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(10px);
+}
+.navbar.container{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 24px;gap:20px;flex-wrap:wrap;
+}
+.logo{font-size:1.4rem;font-weight:700;color:var(--primary);letter-spacing:-0.5px;white-space:nowrap;}
+.logo span{color:var(--accent);}
+.navbar nav{display:flex;gap:28px;align-items:center;flex-wrap:wrap;}
+.navbar nav a{text-decoration:none;color:var(--text);font-weight:500;font-size:0.95rem;transition:.2s;}
+.navbar nav a:hover{color:var(--accent);}
+.navbar input{
+  padding:9px 14px;border:1px solid var(--border);border-radius:8px;
+  background:var(--muted);font-size:0.9rem;min-width:160px;flex:1;
+}
+.navbar input:focus{outline:2px solid var(--accent);border-color:var(--accent);}
+
+/* HERO */
+.hero{padding:120px 0 80px;text-align:center;background:linear-gradient(180deg,#f8fafc 0%,#fff 100%);}
+.hero h1{font-size:3.5rem;font-family:'Playfair Display',serif;color:var(--primary);line-height:1.1;margin-bottom:20px;letter-spacing:-1.5px;}
+.hero p{color:#64748b;font-size:1.25rem;max-width:650px;margin:0 auto 32px;}
+.btn{background:var(--accent);color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;display:inline-block;font-weight:600;transition:.2s;}
+.btn:hover{background:var(--accent-hover);transform:translateY(-2px);}
+
+/* BLOG GRID */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:32px;padding:80px 0;}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;margin:15px;transition:.3s;}
+.card:hover{transform:translateY(-6px);box-shadow:0 20px 40px rgba(15,23,42,.08);border-color:transparent;}
+.card img{width:100%;height:240px;object-fit:cover;}
+.card-body{padding:24px;}
+.card-body.meta{font-size:0.8rem;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;}
+.card-body h3{font-size:1.4rem;margin-bottom:12px;color:var(--primary);line-height:1.3;}
+.card-body p{color:#64748b;margin-bottom:16px;}
+
+/* FOOTER */
+.footer{background:var(--primary);flex-shrink:0;color:#94a3b8;padding:60px 0;text-align:center;border-top:1px solid #1e293b;}
+
+/* POST DETAIL */
+.post-detail{padding:80px 0;}
+.post-image{width:100%;border-radius:16px;margin-bottom:30px;max-height:500px;object-fit:cover;}
+.post-header{text-align:center;margin-bottom:40px;}
+.post-header.meta{color:#64748b;font-size:0.9rem;text-transform:uppercase;}
+.post-header h1{font-size:2.5rem;font-family:'Playfair Display',serif;margin:16px 0;}
+.excerpt{font-size:1.1rem;color:#64748b;}
+.post-content{line-height:1.8;font-size:1.15rem;max-width:800px;margin:0 auto;}
+
+/* TAGS + SHARE */
+.tags{margin:40px 0;}
+.tag{background:#eff6ff;color:#2563eb;padding:6px 12px;border-radius:20px;margin-right:8px;font-weight:500;}
+.share-box{background:var(--muted);padding:30px;border-radius:16px;text-align:center;margin:40px 0;}
+.share-buttons{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.share-btn{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;border:none;cursor:pointer;}
+.whatsapp{background:#25D366;color:#fff;}
+.twitter{background:#1DA1F2;color:#fff;}
+.facebook{background:#1877F2;color:#fff;}
+.copy{background:var(--primary);color:#fff;}
+
+/* COMMENTS */
+.comments{width:100%;max-width:100%;}
+.comment{display:flex;margin-bottom:12px;width:100%;}
+.comment-left{display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:36px;}
+.comment-avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;}
+.comment-line{display:none;}
+.comment-right{flex:1;min-width:0;}
+.comment-bubble{background:#f2f3f5;padding:8px 12px;border-radius:18px;display:inline-block;max-width:100%;box-sizing:border-box;}
+.comment-bubble p{margin:2px 0 0 0;font-size:15px;white-space:pre-wrap;overflow-wrap:break-word;word-wrap:break-word;}
+.comment-header strong{font-size:13px;font-weight:600;}
+.comment-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:#65676b;margin:4px 0 0 12px;}
+.comment-actions.reply-btn{background:none;border:none;color:#65676b;font-weight:600;cursor:pointer;padding:0;}
+.comment-actions.reply-btn:hover{text-decoration:underline;}
+.comment-text{margin:0;}
+.comment-text.collapsed{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;}
+.comment-toggle[hidden]{display:none!important;}
+.comment-toggle{border:none;background:none;padding:0;margin-top:3px;color:#1877f2;font-size:13px;font-weight:600;cursor:pointer;}
+.comment-toggle:hover{text-decoration:underline;}
+.replies{margin-left:44px;margin-top:8px;}
+.reply-item{width:100%;max-width:100%;box-sizing:border-box;}
+.comments-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:1px solid #ddd;padding-bottom:10px;}
+.comments-header h2{font-size:20px;margin:0;}
+.comments-list.comment{margin-bottom:16px;}
+.comment-header span{color:#65676b;}
+.comment-form.comment-input{display:flex;gap:10px;}
+.comment-form textarea{flex:1;border:1px solid #ddd;border-radius:20px;padding:10px 14px;resize:none;}
+.like-btn{padding:8px 16px;border-radius:20px;background:#f2f3f5;text-decoration:none;}
+.like-btn.liked{background:#e7f3ff;color:#1877f2;}
+.read-more-btn{background:none;border:none;color:#65676b;font-weight:600;font-size:13px;cursor:pointer;padding:4px 0 0 12px;}
+.read-more-btn:hover{text-decoration:underline;}
+.show-more-btn{background:none;border:none;color:#007bff;cursor:pointer;font-size:13px;margin:8px 0 8px 10px;padding:0;}
+.show-more-btn:hover{text-decoration:underline;}
+.hidden-reply{display:none;}
+
+/* AUTH */
+.auth-container{max-width:400px;margin:60px auto;padding:30px;background:#fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.08);text-align:center;}
+.auth-form.form-group{text-align:left;margin-bottom:16px;}
+.auth-form label{display:block;margin-bottom:6px;font-weight:600;}
+.auth-form input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;}
+.btn-primary{width:100%;padding:12px;background:#ff5722;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;}
+.error{color:red;background:#ffe6e6;padding:10px;border-radius:8px;}
+.alert{padding:10px 15px;margin-bottom:15px;border-radius:5px;}
+.alert-success{background:#d4edda;color:#155724;border:1px solid #c3e6cb;}
+.alert-error{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;}
+
+/* MISC */
+.like-box a{pointer-events:none;opacity:0.6;}
+.auth-user.like-box a{pointer-events:auto;opacity:1;}
+hr{border:none;border-top:1px solid var(--border);margin:40px 0;}
+.categories{padding:40px 0;text-align:center;}
+.category-list{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:16px;}
+.category-btn{background:var(--muted);color:var(--primary);padding:8px 18px;border-radius:30px;text-decoration:none;font-weight:600;transition:.2s;}
+.category-btn:hover{background:var(--accent);color:#fff;}
+.featured{padding:60px 0;background:var(--muted);border-radius:16px;margin:40px 0;}
+.featured h2{text-align:center;margin-bottom:30px;font-family:'Playfair Display',serif;}
+.featured-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;}
+.featured-card{background:#fff;border-radius:12px;overflow:hidden;}
+.featured-card img{width:100%;height:200px;object-fit:cover;}
+.featured-body{padding:16px;}
+.featured-body small{color:var(--accent);font-weight:600;}
+.featured-body h3{font-size:1.2rem;margin-top:8px;}
+.featured-body a{text-decoration:none;color:var(--primary);}
+
+/* AUTHOR BOX */
+.author-box{display:flex;align-items:flex-start;gap:20px;background:#fff;border:1px solid #eee;border-left:4px solid #ff5722;border-radius:12px;padding:24px;margin:40px 0;}
+.author-box img{width:80px!important;height:80px!important;min-width:80px;min-height:80px;border-radius:50%;object-fit:cover;flex-shrink:0;border:3px solid #ff5722;}
+.author-info h4{margin:0 0 6px 0;font-size:18px;font-weight:700;color:#222;}
+.author-info p{margin:0;font-size:14px;color:#666;line-height:1.6;}
+@media(max-width:600px){.author-box{flex-direction:column;align-items:center;text-align:center;}.author-box img{width:70px!important;height:70px!important;min-width:70px;min-height:70px;}}
+
+/* COMMENTS MODAL */
+.comments-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;visibility:hidden;opacity:0;pointer-events:none;transition:opacity.2s ease,visibility.2s ease;}
+.comments-modal.active{visibility:visible;opacity:1;pointer-events:auto;}
+.comments-modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(3px);}
+.comments-modal-box{position:relative;z-index:2;width:100%;max-width:100vw;height:90vh;max-height:90vh;background:#fff;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:translateY(20px) scale(0.98);transition:transform.2s ease;contain:layout;}
+.comments-modal.active.comments-modal-box{transform:translateY(0) scale(1);}
+.comments-modal-header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:15px 18px;background:#fff;border-bottom:1px solid #eee;position:relative;z-index:3;}
+.comments-modal-header>div:first-child{display:flex;align-items:center;gap:10px;min-width:0;}
+.comments-modal-header h3{margin:0;font-size:20px;line-height:1.2;color:#222;}
+.comments-modal-header span{display:block;margin-top:3px;color:#777;font-size:13px;}
+.comments-modal-close{flex:0 0 auto;width:36px;height:36px;padding:0;border:none;border-radius:50%;background:#f2f2f2;color:#333;font-size:25px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background.15s ease,transform.15s ease;}
+.comments-modal-close:hover{background:#e5e5e5;}
+.comments-modal-close:active{transform:scale(0.92);}
+.modal-back-to-comments{flex:0 0 auto;width:34px;height:34px;padding:0;border:none;border-radius:50%;background:#f2f2f2;color:#333;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background.15s ease;}
+.modal-back-to-comments:hover{background:#e5e5e5;}
+.comments-modal-body{flex:1 1 auto;min-height:0;height:0;overflow-y:auto;overflow-x:hidden;padding:5px;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;overflow-wrap:anywhere;word-break:break-word;}
+.comments-modal-body::-webkit-scrollbar{width:7px;}
+.comments-modal-body::-webkit-scrollbar-track{background:transparent;}
+.comments-modal-body::-webkit-scrollbar-thumb{background:#cfcfcf;border-radius:20px;}
+.comments-modal-body::-webkit-scrollbar-thumb:hover{background:#aaa;}
+.comments-modal-body{scrollbar-width:thin;scrollbar-color:#cfcfcf transparent;}
+.modal-comment-block{width:100%;margin-bottom:20px;}
+.modal-comment-block:last-child{margin-bottom:0;}
+.comments-modal-body.comments-list{width:100%;}
+.comments-modal-body.comment{width:100%;max-width:100%;box-sizing:border-box;}
+.comments-modal-body.comment-text-wrapper{width:100%;min-width:0;}
+.comments-modal-body.comment-text{margin:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word;}
+.comments-modal-body.comment-text.collapsed{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;max-height:4.5em;}
+.comments-modal-body.comment-text.expanded{display:block;height:auto;max-height:none;overflow:visible;}
+.comments-modal-body.comment-toggle{display:inline-block;margin-top:4px;padding:0;border:none;background:transparent;color:#555;font-size:13px;font-weight:600;line-height:1.4;cursor:pointer;}
+.comments-modal-body.comment-toggle[hidden]{display:none;}
+.comments-modal-body.comment-toggle:hover{text-decoration:underline;}
+.comments-modal-body.replies{width:auto;max-width:calc(100% - 20px);margin-top:12px;}
+.comments-modal-body.reply-item{width:100%;}
+.modal-replies-title{margin:0 0 15px;font-size:16px;line-height:1.4;}
+.modal-divider{border:0;border-top:1px solid #eee;margin:20px 0;}
+.comments-modal-footer{flex:0 0 auto;padding:12px 16px;background:#fff;border-bottom:1px solid #eee;position:relative;z-index:3;}
+.comments-modal-footer.comment-form{margin:0;}
+.comments-modal-footer.comment-input{display:flex;align-items:center;gap:10px;width:100%;}
+.comments-modal-footer.comment-textarea{flex:1;min-width:0;resize:none;box-sizing:border-box;}
+.comments-loading{min-height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#777;}
+.comments-loading p{margin:0;font-size:14px;}
+.loading-spinner{width:30px;height:30px;border:3px solid #ddd;border-top-color:#555;border-radius:50%;animation:comments-spin.7s linear infinite;}
+@keyframes comments-spin{to{transform:rotate(360deg);}}
+.comments-error{min-height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#777;}
+.comments-modal-body.no-comments{text-align:center;padding:40px 10px;color:#777;}
+body.comments-modal-open{overflow:hidden;}
+#comments-modal-content{display:flex;flex-direction:column;height:90vh;max-height:90vh;min-height:0;overflow:hidden;}
+@media(max-width:600px){
+ .comments-modal{padding:0;}
+ .comments-modal-box{width:100%;max-width:none;height:94vh;max-height:94vh;border-radius:18px 18px 0 0;}
+ .comments-modal-body{padding:16px;}
+ .comments-modal-header{padding:13px 15px;}
+ .comments-modal-footer{padding:10px 12px;}
+ .comments-modal-body.replies{max-width:calc(100% - 10px);}
+}
+@media(max-width:380px){
+ .comments-modal-box{height:96vh;max-height:96vh;}
+ .comments-modal-body{padding:13px;}
+ .comments-modal-header h3{font-size:18px;}
+}
+@media(max-width:768px){
+ .hero h1{font-size:2.4rem;}
+ .hero{padding:80px 0 60px;}
+ .navbar.container{padding:12px 16px;}
+ .navbar nav{gap:16px;font-size:0.9rem;}
+ .navbar input{width:100%;order:3;}
+ .grid{padding:60px 0;gap:24px;}
+}

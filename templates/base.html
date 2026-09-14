@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+{% load static %}
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}BRIGHTLY BLOG{% endblock %}</title>
+<meta name="description" content="{% block description %}Professional tech blog built with Django{% endblock %}">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<!--
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/ckeditor.css">
+-->
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+<link rel="stylesheet" href="{% static 'css/ckeditor.css' %}">
+
+</head>
+<body>
+<div class="wrapper">
+  <header class="navbar">
+    <div class="container">
+      <a href="/" class="logo">BRIGHTLY<span>BLOG</span></a>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/blog/">All Articles</a>
+        <form action="/blog/" method="get"><input type="text" name="q" placeholder="Search articles..."></form>
+        {% if user.is_authenticated %}
+          Hi {{ user.username }} | 
+          <form method="post" action="{% url 'logout' %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn-logout">Logout</button>
+          </form>
+        {% else %}
+          <a href="{% url 'login' %}">Login</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer class="footer">
+    <div class="container">
+      <p>© 2026 BRIGHTLY BLOG. Built with Django. Professional Publishing Platform.</p>
+    </div>
+  </footer>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    document.querySelectorAll(".comment-text-wrapper").forEach(function (wrapper) {
+
+        const text = wrapper.querySelector(".comment-text");
+        const button = wrapper.querySelector(".comment-toggle");
+
+        if (!text || !button) return;
+
+        const fullText = text.textContent.trim();
+
+        // Count words
+        const wordCount = fullText
+            .split(/\s+/)
+            .filter(Boolean)
+            .length;
+
+        // Calculate line height
+        const style = window.getComputedStyle(text);
+
+        let lineHeight = parseFloat(style.lineHeight);
+
+        if (isNaN(lineHeight)) {
+            lineHeight = parseFloat(style.fontSize) * 1.4;
+        }
+
+        // A 3-line height
+        const threeLines = lineHeight * 3;
+
+        // Check natural height BEFORE truncating
+        const isMoreThanThreeLines =
+            text.scrollHeight > threeLines + 2;
+
+        const isMoreThan35Words =
+            wordCount > 35;
+
+        // Only truncate if necessary
+        if (!isMoreThanThreeLines && !isMoreThan35Words) {
+            return;
+        }
+
+        // Collapse
+        text.classList.add("collapsed");
+
+        // Show button
+        button.hidden = false;
+
+        let expanded = false;
+
+        button.addEventListener("click", function () {
+
+            if (!expanded) {
+
+                text.classList.remove("collapsed");
+
+                button.textContent = "Show less";
+
+                expanded = true;
+
+            } else {
+
+                text.classList.add("collapsed");
+
+                button.textContent = "Show more";
+
+                expanded = false;
+            }
+
+        });
+
+    });
+
+});
+</script>
+
+
+</body>
+</html>

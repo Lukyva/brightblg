@@ -1,0 +1,66 @@
+<div class="comments-modal-header">
+    <div>
+        <h3>Comments</h3>
+        <span>{{ total_comments }} comments</span>
+    </div>
+
+    <button type="button" class="comments-modal-close" aria-label="Close">
+        &times;
+    </button>
+</div>
+
+<div class="comments-modal-body">
+
+    {% if comments %}
+
+        <div class="comments-list">
+
+            {% for comment in comments %}
+
+                <div class="modal-comment-block">
+                    {% include 'comment.html' with comment=comment modal_mode=True %}
+
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+    {% else %}
+
+        <p class="no-comments">No comments yet.</p>
+
+    {% endif %}
+
+</div>
+
+{% if user.is_authenticated %}
+
+<div class="comments-modal-footer">
+
+    <form method="post"
+          class="comment-form ajax-comment-form"
+          action="{% url 'all_comments' post.slug %}">
+
+        {% csrf_token %}
+
+        <div class="comment-input">
+
+            <img src="{{ user.profile.image.url }}"
+                 class="comment-avatar">
+
+            {{ form.body }}
+
+            {{ form.parent_id }}
+
+        </div>
+
+        <button type="submit" class="btn">
+            Comment
+        </button>
+
+    </form>
+
+</div>
+
+{% endif %}

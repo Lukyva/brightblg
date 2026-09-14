@@ -1,0 +1,287 @@
+document.addEventListener("DOMContentLoaded", function(){
+  const likeBtn = document.getElementById("like-btn");
+  if(!likeBtn) return;
+
+  likeBtn.addEventListener("click", function(){
+    const slug = this.dataset.slug;
+    const likeCount = document.getElementById("like-count");
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    
+    this.disabled = true; // prevent spam clicking
+
+    fetch(`/post/${slug}/like/`, {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": csrfToken,
+        "X-Requested-With": "XMLHttpRequest"
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if(data.error) return alert(data.error);
+      
+      likeCount.textContent = data.total_likes;
+      
+      if(data.liked){
+        likeBtn.classList.add("liked");
+        likeBtn.innerHTML = `❤️ <span id="like-count">${data.total_likes}</span> Like${data.total_likes == 1 ? '' : 's'}`;
+      } else {
+        likeBtn.classList.remove("liked");
+        likeBtn.innerHTML = `🤍 <span id="like-count">${data.total_likes}</span> Like${data.total_likes == 1 ? '' : 's'}`;
+      }
+    })
+    .catch(err => console.error(err))
+    .finally(() => { this.disabled = false; });
+  });
+});
+
+post_detail.html
+
+{% csrf_token %}
+<div class="like-box" style="margin: 30px 0; text-align: center;">
+  {% if user.is_authenticated %}
+    <button type="button" id="like-btn" class="like-btn {% if user in post.likes.all %}liked{% endif %}" data-slug="{{ post.slug }}">
+      {% if user in post.likes.all %}❤️{% else %}🤍{% endif %} 
+      <span id="like-count">{{ post.likes.count }}</span> Like{{ post.likes.count|pluralize }}
+    </button>
+  {% else %}
+    <a href="{% url 'login' %}?next={{ request.path }}" class="like-btn">
+      🤍 {{ post.likes.count }} Like{{ post.likes.count|pluralize }} - Login to like
+    </a>
+  {% endif %}
+</div>
+    
+@login_required
+def like_post(request, slug):
+    if request.method != 'POST': # block GET
+        return JsonResponse({'error': 'POST required'}, status=400)
+        
+    post = get_object_or_404(Post, slug=slug)
+    user = request.user
+    liked = False
+
+    if user in post.likes.all():
+        post.likes.remove(user) # DISLIKE
+        liked = False
+    else:
+        post.likes.add(user) # LIKE
+        liked = True
+
+    return JsonResponse({
+        'liked': liked,
+        'total_likes': post.likes.count()
+    })
+
+.like-box a{pointer-events: none;opacity:1;} /* allow clicks */
+
+.like-btn { 
+  padding: 10px 20px; 
+  border-radius: 25px; 
+  background: #f2f3f5; 
+  font-weight: 600;
+  font-size: 14px;
+  color: #050505;
+  transition: .2s;
+  border: none;
+  cursor: pointer;
+}
+.like-btn:hover { background: #e4e6eb; transform: translateY(-1px); }
+.like-btn.liked { background: #e7f3ff; color: #1877f2; }
+.like-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+
+urls.py 
+path('post/<slug:slug>/like/', views.like_post, name='like_post'),
+    
+Yes. I checked your uploaded code, and the like/unlike logic is close, but the JavaScript is unnecessarily manipulating the old #like-count element and then replacing it with a new one. That can cause unreliable behavior on subsequent clicks. Your backend check can also be made more reliable with .filter(...).exists() instead of user in post.likes.all(). 
+
+The clean fix is to replace your JavaScript and Django view with the versions below.
+
+1. Replace your like JavaScript
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const likeBtn = document.getElementById("like-btn");
+
+    if (!likeBtn) return;
+
+    likeBtn.addEventListener("click", function () {
+
+        // Don't allow another click while request is processing
+        if (likeBtn.disabled) return;
+
+        const slug = likeBtn.dataset.slug;
+        const csrfToken = document.querySelector(
+            '[name=csrfmiddlewaretoken]'
+        ).value;
+
+        likeBtn.disabled = true;
+
+        fetch(`/post/${slug}/like/`, {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrfToken,
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": "application/json"
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Failed to like/unlike post.");
+            }
+
+            return response.json();
+        })
+        .then(data => {
+
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            // Update button state
+            if (data.liked === true) {
+
+                likeBtn.classList.add("liked");
+
+                likeBtn.innerHTML =
+                    `❤️ <span id="like-count">${data.total_likes}</span> ` +
+                    `${data.total_likes === 1 ? "Like" : "Likes"}`;
+
+            } else {
+
+                likeBtn.classList.remove("liked");
+
+                likeBtn.innerHTML =
+                    `🤍 <span id="like-count">${data.total_likes}</span> ` +
+                    `${data.total_likes === 1 ? "Like" : "Likes"}`;
+            }
+        })
+        .catch(error => {
+            console.error("Like error:", error);
+        })
+        .finally(() => {
+            likeBtn.disabled = false;
+        });
+    });
+});
+</script>2. Replace your Django like_post view
+
+Your current view checks:
+
+if user in post.likes.all():
+
+Instead, use .filter().exists(). This directly checks whether the current user has a like relationship with that post.
+
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+
+@login_required
+def like_post(request, slug):
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": "POST required"},
+            status=400
+        )
+
+    post = get_object_or_404(Post, slug=slug)
+    user = request.user
+
+    # Check whether this user has already liked the post
+    already_liked = post.likes.filter(id=user.id).exists()
+
+    if already_liked:
+        # User already liked it -> UNLIKE
+        post.likes.remove(user)
+        liked = False
+    else:
+        # User hasn't liked it -> LIKE
+        post.likes.add(user)
+        liked = True
+
+    return JsonResponse({
+        "liked": liked,
+        "total_likes": post.likes.count()
+    })3. Keep your HTML like button like this
+
+Your existing HTML structure is basically correct. 
+
+{% csrf_token %}
+
+<div class="like-box">
+
+    {% if user.is_authenticated %}
+
+        <button
+            type="button"
+            id="like-btn"
+            class="like-btn {% if user in post.likes.all %}liked{% endif %}"
+            data-slug="{{ post.slug }}"
+        >
+            {% if user in post.likes.all %}
+                ❤️
+            {% else %}
+                🤍
+            {% endif %}
+
+            <span id="like-count">
+                {{ post.likes.count }}
+            </span>
+
+            Like{{ post.likes.count|pluralize }}
+        </button>
+
+    {% else %}
+
+        <a
+            href="{% url 'login' %}?next={{ request.path }}"
+            class="like-btn"
+        >
+            🤍 {{ post.likes.count }}
+            Like{{ post.likes.count|pluralize }}
+            - Login to like
+        </a>
+
+    {% endif %}
+
+</div>4. Your URL stays the same
+
+path(
+    'post/<slug:slug>/like/',
+    views.like_post,
+    name='like_post'
+),
+
+How it will work now
+
+The behavior becomes:
+
+Not liked → 🤍 5 Likes
+
+User clicks:
+
+Liked → ❤️ 6 Likes
+
+User clicks again:
+
+Unliked → 🤍 5 Likes
+
+User clicks again:
+
+Liked → ❤️ 6 Likes
+
+And this works independently for each logged-in user because Django's ManyToMany relationship stores which users have liked the post.
+
+One other thing: remove this CSS rule from your current code:
+
+.like-box a {
+    pointer-events: none;
+    opacity: 1;
+}
+
+It prevents the login link from being clickable. Your current file has that rule even though the comment says "allow clicks." 
+
+Your normal button CSS can remain as it is.    
+    

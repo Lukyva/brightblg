@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}All Articles | BRIGHTLY BLOG{% endblock %}
+{% block content %}
+<section class="container" style="padding:60px 0;">
+  <h2>All Articles</h2>
+  <p style="color:#64748b;margin-bottom:30px;">{{ posts.paginator.count }} posts published</p>
+  
+  <div class="grid">
+    {% for post in posts %}
+    <div class="card">
+      <img src="{{ post.featured_image.url }}" alt="{{ post.title }}">
+      <div class="card-body">
+        <small>{{ post.created|date:"M d, Y" }} • {{ post.category.name }}</small>
+        <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
+        <p>{{ post.excerpt|truncatewords:20 }}</p>
+        <a href="{{ post.get_absolute_url }}" class="btn">Read More</a>
+      </div>
+    </div>
+    {% empty %}
+    <p>No articles published yet.</p>
+    {% endfor %}
+  </div>
+
+  <!-- Pagination -->
+  <div style="margin-top:40px;text-align:center;">
+    {% if posts.has_previous %}<a href="?page={{ posts.previous_page_number }}" class="btn">Prev</a>{% endif %}
+    <span>Page {{ posts.number }} of {{ posts.paginator.num_pages }}</span>
+    {% if posts.has_next %}<a href="?page={{ posts.next_page_number }}" class="btn">Next</a>{% endif %}
+  </div>
+</section>
+{% endblock %}

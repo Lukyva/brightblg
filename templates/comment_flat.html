@@ -1,0 +1,74 @@
+<div class="comment">
+
+    <div class="comment-left">
+
+        <img src="{{ comment.user.profile.image.url }}"
+             class="comment-avatar">
+
+    </div>
+
+
+    <div class="comment-right">
+
+        <div class="comment-bubble">
+
+            <div class="comment-header">
+
+                <strong>
+                    {{ comment.user.username }}
+                </strong>
+
+            </div>
+
+
+            <div class="comment-text-wrapper">
+
+                <p class="comment-text">
+                    {{ comment.body }}
+                </p>
+
+                <button type="button"
+                        class="comment-toggle"
+                        hidden>
+
+                    Show more
+
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div class="comment-actions">
+
+            <span>
+                {{ comment.created|timesince }} ago
+            </span>
+
+            {% if user.is_authenticated %}
+                {% comment %}
+                <button type="button"
+                        class="reply-btn"
+                        data-id="{{ comment.parent.id|default:comment.id }}">
+
+                    Reply
+
+                </button>
+                {% endcomment %}
+                
+                <button
+                    type="button"
+                    class="reply-btn"
+                    data-id="{{ comment.parent.id|default:comment.id }}"
+                    data-url="{% url 'comment_thread' comment.parent.id|default:comment.id %}">
+                    Reply
+                </button>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>

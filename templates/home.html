@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}BRIGHTLY BLOG | Insights, Tutorials & News{% endblock %}
+{% load blog_tags %}
+{% block content %}
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <h1>Ideas That Build Better Products</h1>
+    <p>Professional insights, tutorials, and company updates from BRIGHTLY.</p>
+    <a href="#latest" class="btn">Start Reading</a>
+  </div>
+</section>
+
+<!-- CATEGORIES - NEW -->
+{% if categories %}
+<section class="categories container">
+  <h3>Browse by Topic</h3>
+  <div class="category-list">
+    {% for cat in categories %}
+    {% comment %}
+    <a href="/category/{{ cat.slug }}/" class="category-btn">{{ cat.name }}</a>
+    {% endcomment %}
+    <a href="{% url 'category_posts' cat.slug %}" class="category-btn">{{ cat.name }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- FEATURED/TRENDING - NEW -->
+{% if featured %}
+<section class="featured container">
+  <h2>🔥 Trending This Week</h2>
+  <div class="featured-grid">
+    {% for post in featured %}
+    <div class="featured-card">
+      <img src="{{ post.featured_image.url }}" alt="{{ post.title }}">
+      <div class="featured-body">
+        <small>{{ post.views|humanize_number }} views</small>
+        <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- LATEST ARTICLES -->
+<section class="container" id="latest">
+  <h2 style="margin-bottom:20px;">Latest Articles</h2>
+  <div class="grid">
+    {% for post in posts %}
+    <div class="card">
+      <img src="{{ post.featured_image.url }}" alt="{{ post.title }}">
+      <div class="card-body">
+        <small>{{ post.created|date:"M d, Y" }} • {{ post.category.name }} • {{ post.views|humanize_number }} views</small>
+        <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
+        <p>{{ post.excerpt|truncatewords:20 }}</p>
+        <a href="{{ post.get_absolute_url }}" class="btn">Read More</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}{{ category.name }} | BRIGHTLY BLOG{% endblock %}
+
+{% block content %}
+<section class="container" style="padding-top:40px;">
+  <h1>Posts in "{{ category.name }}"</h1>
+  <p>Showing {{ posts.count }} article{{ posts.count|pluralize }}</p>
+
+  {% if posts %}
+  <div class="grid" style="margin-top:30px;">
+    {% for post in posts %}
+    <div class="card">
+      <img src="{{ post.featured_image.url }}" alt="{{ post.title }}">
+      <div class="card-body">
+        <small>{{ post.created|date:"M d, Y" }}</small>
+        <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
+        <p>{{ post.excerpt|truncatewords:20 }}</p>
+        <a href="{{ post.get_absolute_url }}" class="btn">Read More</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <p style="margin-top:20px;">No posts in this category yet.</p>
+  {% endif %}
+
+  <a href="/" class="btn" style="margin-top:30px;">← Back to Home</a>
+</section>
+{% endblock %}

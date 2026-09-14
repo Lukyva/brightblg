@@ -1,0 +1,113 @@
+<div class="comment" id="comment-{{ comment.id }}">
+
+    <div class="comment-left">
+
+        <img src="{{ comment.user.profile.image.url }}"
+             class="comment-avatar">
+
+    </div>
+
+
+    <div class="comment-right">
+
+        <div class="comment-bubble">
+
+            <div class="comment-header">
+
+                <strong>
+                    {{ comment.user.username }}
+                </strong>
+
+            </div>
+
+
+            <div class="comment-text-wrapper">
+
+                <p class="comment-text">
+                    {{ comment.body }}
+                </p>
+
+                <button type="button"
+                        class="comment-toggle"
+                        hidden>
+                    Show more
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div class="comment-actions">
+
+            <span>
+                {{ comment.created|timesince }} ago
+            </span>
+
+            {% if user.is_authenticated %}
+                {% comment %}
+                <button type="button"
+                        class="reply-btn"
+                        data-id="{{ comment.parent.id|default:comment.id }}">
+
+                    Reply
+
+                </button>
+                {% endcomment %}
+                
+                <button
+                    type="button"
+                    class="reply-btn"
+                    data-id="{{ comment.id }}"
+                    data-url="{% url 'comment_thread' comment.id %}">
+                    Reply
+                </button>
+            {% endif %}
+
+        </div>
+
+
+        {% if not hide_replies %}
+
+            {% with replies=comment.replies.all %}
+
+                {% if replies %}
+
+                    <div class="replies">
+                         
+
+                        {% with latest_reply=replies.last %}
+
+                            <div class="reply-item">
+
+                                {% include 'comment_flat.html' with comment=latest_reply %}
+
+                            </div>
+
+                        {% endwith %}
+
+                    </div>
+
+
+                    {% if replies|length > 1 %}
+
+                        <a href="{% url 'comment_thread' comment.id %}"
+                           class="show-more-btn show-replies-modal"
+                           data-url="{% url 'comment_thread' comment.id %}">
+
+                            View all {{ replies.count }} replies
+
+                        </a>
+                        
+
+                    {% endif %}
+
+                {% endif %}
+
+            {% endwith %}
+
+        {% endif %}
+
+    </div>
+
+</div>

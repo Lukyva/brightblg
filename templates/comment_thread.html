@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+
+{% block title %}
+Replies | BRIGHTLY BLOG
+{% endblock %}
+
+
+{% block content %}
+
+<div class="container"
+     style="max-width: 600px; padding-top: 20px;">
+
+    <a href="{% url 'all_comments' root_comment.post.slug %}"
+       class="back-link">
+
+        ← Back to all comments
+
+    </a>
+
+
+    <h3>
+        Replies
+    </h3>
+
+
+    {% include 'comment.html' with comment=root_comment hide_replies=True %}
+
+
+    <hr>
+
+
+    <h4>
+        All {{ root_comment.replies.count }} Replies
+    </h4>
+
+
+    <div class="replies">
+        {% comment %}
+        {% for reply in replies %}
+
+            {% include 'comment_flat.html' with comment=reply %}
+
+        {% empty %}
+        
+        
+
+            <p class="no-comments">
+                No replies yet.
+            </p>
+
+        {% endfor %}
+        
+
+    </div>
+
+
+    {% if user.is_authenticated %}
+
+        <form method="post"
+              class="comment-form"
+              style="margin-top: 20px;">
+
+            {% csrf_token %}
+
+            <img src="{{ user.profile.image.url }}"
+                 class="comment-avatar">
+
+            {{ form.body }}
+
+            <input type="hidden"
+                   name="parent_id"
+                   value="{{ root_comment.id }}">
+
+            <button type="submit"
+                    class="btn">
+
+                Post Reply
+
+            </button>
+
+        </form>
+
+    {% else %}
+
+        <p>
+            <a href="{% url 'login' %}?next={{ request.path }}">
+                Login
+            </a>
+            to reply
+        </p>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}
